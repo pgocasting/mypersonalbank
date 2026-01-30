@@ -78,7 +78,7 @@ function makeId() {
 function formatMoney(amount: number) {
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency: 'USD',
+    currency: 'PHP',
     maximumFractionDigits: 2,
   }).format(amount)
 }
