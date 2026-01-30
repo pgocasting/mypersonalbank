@@ -24,7 +24,41 @@ type BankingData = {
 type MobilePage = 'recent' | 'checking' | 'savings' | 'goals'
 
 const SESSION_KEY = 'mpb.session.v1'
-const DATA_KEY = 'mpb.data.v1'
+const DATA_KEY_PREFIX = 'mpb.data.v1'
+const ACCOUNTS_KEY = 'mpb.accounts.v1'
+
+function dataKeyForUser(username: string) {
+  return `${DATA_KEY_PREFIX}.${username.toLowerCase()}`
+}
+
+type Account = {
+  username: string
+  password: string
+}
+
+function loadAccounts(): Account[] {
+  const raw = localStorage.getItem(ACCOUNTS_KEY)
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    const safe = parsed.filter(
+      (a): a is Account =>
+        !!a &&
+        typeof (a as Account).username === 'string' &&
+        typeof (a as Account).password === 'string' &&
+        !!(a as Account).username,
+    )
+    return safe
+  } catch {
+    localStorage.removeItem(ACCOUNTS_KEY)
+    return []
+  }
+}
+
+function saveAccounts(accounts: Account[]) {
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts))
+}
 
 function todayISO() {
   const d = new Date()
@@ -53,6 +87,8 @@ function App() {
   const [user, setUser] = useState<User | null>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -87,10 +123,18 @@ function App() {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
 
   useEffect(() => {
-    const raw = localStorage.getItem(DATA_KEY)
-    console.log('[App] Load from localStorage:', raw)
+    setIsInitialLoad(true)
+
+    if (!user?.name) {
+      setData(emptyData)
+      setIsInitialLoad(false)
+      return
+    }
+
+    const key = dataKeyForUser(user.name)
+    const raw = localStorage.getItem(key)
     if (!raw) {
-      console.log('[App] No data in localStorage, staying empty')
+      setData(emptyData)
       setIsInitialLoad(false)
       return
     }
@@ -101,7 +145,6 @@ function App() {
         typeof parsed?.savingsBalance === 'number' &&
         Array.isArray(parsed?.transactions)
       ) {
-        console.log('[App] Parsed data from localStorage:', parsed)
         setData({
           checkingBalance: parsed.checkingBalance,
           savingsBalance: parsed.savingsBalance,
@@ -109,20 +152,20 @@ function App() {
           transactions: parsed.transactions,
         })
       } else {
-        console.warn('[App] Invalid data shape in localStorage, ignoring')
+        setData(emptyData)
       }
-    } catch (e) {
-      console.error('[App] Failed to parse localStorage data:', e)
-      localStorage.removeItem(DATA_KEY)
+    } catch {
+      localStorage.removeItem(key)
+      setData(emptyData)
     }
     setIsInitialLoad(false)
-  }, [])
+  }, [user])
 
   useEffect(() => {
     if (isInitialLoad) return // Don't save the initial empty state
-    console.log('[App] Saving to localStorage:', data)
-    localStorage.setItem(DATA_KEY, JSON.stringify(data))
-  }, [data, isInitialLoad])
+    if (!user?.name) return
+    localStorage.setItem(dataKeyForUser(user.name), JSON.stringify(data))
+  }, [data, isInitialLoad, user])
 
   const transactions = data.transactions
   const checkingBalance = data.checkingBalance
@@ -323,8 +366,9 @@ function App() {
   function onClearAllData() {
     if (!confirm('This will reset all balances, transactions, and goals. Are you sure?')) return
     setData(emptyData)
-    // Force save to localStorage immediately so it persists after refresh
-    localStorage.setItem(DATA_KEY, JSON.stringify(emptyData))
+    if (user?.name) {
+      localStorage.setItem(dataKeyForUser(user.name), JSON.stringify(emptyData))
+    }
     closeModal()
   }
 
@@ -350,21 +394,81 @@ function App() {
       return
     }
 
-    if (u !== 'Admin' || p !== 'admin123') {
-      setError('Invalid login. Use Admin / admin123.')
+    if (u === 'Admin' && p === 'admin123') {
+      const sessionUser: User = { name: 'Admin' }
+      localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
+      setUser(sessionUser)
+      setUsername('')
+      setPassword('')
       return
     }
 
-    const sessionUser: User = { name: 'Admin' }
+    const accounts = loadAccounts()
+    const match = accounts.find((a) => a.username.toLowerCase() === u.toLowerCase() && a.password === p)
+    if (!match) {
+      setError('Invalid username or password.')
+      return
+    }
+
+    const sessionUser: User = { name: match.username }
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
     setUser(sessionUser)
     setUsername('')
     setPassword('')
   }
 
+  function onSignup(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+
+    const u = username.trim()
+    const p = password
+    const cp = confirmPassword
+
+    if (!u || !p || !cp) {
+      setError('Please complete all fields.')
+      return
+    }
+
+    if (u.toLowerCase() === 'admin') {
+      setError('This username is reserved.')
+      return
+    }
+
+    if (p.length < 6) {
+      setError('Password must be at least 6 characters.')
+      return
+    }
+
+    if (p !== cp) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    const accounts = loadAccounts()
+    const exists = accounts.some((a) => a.username.toLowerCase() === u.toLowerCase())
+    if (exists) {
+      setError('Username already exists.')
+      return
+    }
+
+    const nextAccounts = [...accounts, { username: u, password: p }]
+    saveAccounts(nextAccounts)
+
+    const sessionUser: User = { name: u }
+    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
+    setUser(sessionUser)
+    setUsername('')
+    setPassword('')
+    setConfirmPassword('')
+    setAuthMode('login')
+  }
+
   function onLogout() {
     localStorage.removeItem(SESSION_KEY)
     setUser(null)
+    setData(emptyData)
+    setIsInitialLoad(true)
   }
 
   function onSelectMobilePage(page: MobilePage) {
@@ -382,11 +486,13 @@ function App() {
             </div>
             <div>
               <div className="auth-title">My Personal Bank</div>
-              <div className="auth-subtitle">Sign in to your account</div>
+              <div className="auth-subtitle">
+                {authMode === 'login' ? 'Sign in to your account' : 'Create a new account'}
+              </div>
             </div>
           </div>
 
-          <form className="auth-form" onSubmit={onLogin}>
+          <form className="auth-form" onSubmit={authMode === 'login' ? onLogin : onSignup}>
             <label className="field">
               <span>Username</span>
               <input
@@ -403,14 +509,40 @@ function App() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Please enter password"
-                autoComplete="current-password"
+                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
               />
             </label>
+
+            {authMode === 'signup' ? (
+              <label className="field">
+                <span>Confirm Password</span>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm password"
+                  autoComplete="new-password"
+                />
+              </label>
+            ) : null}
 
             {error ? <div className="auth-error">{error}</div> : null}
 
             <button className="primary" type="submit">
-              Sign in
+              {authMode === 'login' ? 'Sign in' : 'Create account'}
+            </button>
+
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => {
+                setError(null)
+                setPassword('')
+                setConfirmPassword('')
+                setAuthMode((m) => (m === 'login' ? 'signup' : 'login'))
+              }}
+            >
+              {authMode === 'login' ? 'Create new account' : 'Back to sign in'}
             </button>
           </form>
         </div>
