@@ -341,7 +341,23 @@ function App() {
       category: 'Adjustment',
       scope: 'checking',
     })
-    setData((prev) => ({ ...prev, checkingBalance: amount }))
+
+    if (amount < checkingBalance) {
+      const movedToSavings = Math.round((checkingBalance - amount) * 100) / 100
+      setData((prev) => ({
+        ...prev,
+        checkingBalance: amount,
+        savingsBalance: Math.round((prev.savingsBalance + movedToSavings) * 100) / 100,
+      }))
+      addTransaction({
+        description: 'Moved remaining balance to Savings',
+        amount: movedToSavings,
+        category: 'Transfer',
+        scope: 'both',
+      })
+    } else {
+      setData((prev) => ({ ...prev, checkingBalance: amount }))
+    }
     closeModal()
   }
 
