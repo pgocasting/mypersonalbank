@@ -15,7 +15,7 @@
 
 .auth-card {
   width: 100%;
-  max-width: 460px;
+  max-width: 380px;
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(2, 6, 23, 0.55);
@@ -99,6 +99,16 @@
   margin-top: 14px;
   color: rgba(148, 163, 184, 0.85);
   font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .auth-shell {
+    padding: 36px calc(28px + env(safe-area-inset-left)) 36px calc(28px + env(safe-area-inset-right));
+  }
+
+  .auth-card {
+    max-width: 300px;
+  }
 }
 
 .primary {
