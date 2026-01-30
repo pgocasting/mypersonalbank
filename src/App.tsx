@@ -377,7 +377,9 @@ function App() {
       <div className="auth-shell">
         <div className="auth-card">
           <div className="auth-brand">
-            <div className="auth-logo">MPB</div>
+            <div className="auth-logo">
+              <img className="auth-logo-img" src="/Images/Logobank.png" alt="Bank logo" />
+            </div>
             <div>
               <div className="auth-title">My Personal Bank</div>
               <div className="auth-subtitle">Sign in to your account</div>
@@ -390,17 +392,17 @@ function App() {
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="demo"
+                placeholder="Please enter username"
                 autoComplete="username"
               />
             </label>
             <label className="field">
               <span>Password</span>
               <input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="demo"
-                type="password"
+                placeholder="Please enter password"
                 autoComplete="current-password"
               />
             </label>
@@ -411,8 +413,6 @@ function App() {
               Sign in
             </button>
           </form>
-
-          <div className="auth-hint">Login: Admin / admin123</div>
         </div>
       </div>
     )
